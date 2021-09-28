@@ -3,6 +3,7 @@ from typing import Set
 
 from bemani.backend.iidx import IIDXFactory
 from bemani.backend.popn import PopnMusicFactory
+from bemani.backend.bst import BSTFactory
 from bemani.backend.jubeat import JubeatFactory
 from bemani.backend.bishi import BishiBashiFactory
 from bemani.backend.ddr import DDRFactory
@@ -45,3 +46,5 @@ def register_games(config: Config) -> None:
         MusecaFactory.register_all()
     if GameConstants.MGA in config.support:
         MetalGearArcadeFactory.register_all()
+    if GameConstants.BST in config.support:
+        BSTFactory.register_all()
