@@ -26,7 +26,8 @@ class Beatstream2(EventLogHandler, BSTBase):
     
     def get_events(self) -> Node:
         root = super().get_events()
-        # Campaign, duno how to get the final phase to show up
+        
+        # Campaign
         data = Node.void('data')
         data.add_child(Node.s32('type', 0))
         data.add_child(Node.s32('phase', 18))
@@ -37,12 +38,6 @@ class Beatstream2(EventLogHandler, BSTBase):
         data.add_child(Node.s32('type', 1))
         data.add_child(Node.s32('phase', 4))
         root.add_child(data)
-        
-        # Unknown
-        #data = Node.void('data')
-        #data.add_child(Node.s32('type', 2))
-        #data.add_child(Node.s32('phase', 8)) 
-        #root.add_child(data)
 
         # 5th KAC screen on the demo reel
         data = Node.void('data')
@@ -56,11 +51,17 @@ class Beatstream2(EventLogHandler, BSTBase):
         data.add_child(Node.s32('phase', 2))
         root.add_child(data)
         
-        # Unknown
-        # data = Node.void('data')
-        # data.add_child(Node.s32('type', 3))
-        # data.add_child(Node.s32('phase', 3))
-        # root.add_child(data)
+        # Enables continues
+        data = Node.void('data')
+        data.add_child(Node.s32('type', 3))
+        data.add_child(Node.s32('phase', 3))
+        root.add_child(data)
+
+        # Allows 3 stage with paseli
+        data = Node.void('data')
+        data.add_child(Node.s32('type', 3))
+        data.add_child(Node.s32('phase', 4))
+        root.add_child(data)
         
         # Local matching at start of credit enable
         data = Node.void('data')
@@ -80,29 +81,23 @@ class Beatstream2(EventLogHandler, BSTBase):
         data.add_child(Node.s32('phase', 12))
         root.add_child(data)
 
-        # Unknown
-        # data = Node.void('data')
-        # data.add_child(Node.s32('type', 3))
-        # data.add_child(Node.s32('phase', 13))
-        # root.add_child(data)
+        # Unlocks the bemani rockin fes songs
+        data = Node.void('data')
+        data.add_child(Node.s32('type', 3))
+        data.add_child(Node.s32('phase', 13))
+        root.add_child(data) 
 
-        # Unknown
-        # data = Node.void('data')
-        # data.add_child(Node.s32('type', 3))
-        # data.add_child(Node.s32('phase', 16))
-        # root.add_child(data)
-        
+        # Enables Illil partner addition
+        data = Node.void('data')
+        data.add_child(Node.s32('type', 3))
+        data.add_child(Node.s32('phase', 16))
+        root.add_child(data)
+
         # Controls notifs when carding in      
         data = Node.void('data')
         data.add_child(Node.s32('type', 4))
-        data.add_child(Node.s32('phase', 30))
+        data.add_child(Node.s32('phase', 31))
         root.add_child(data)
-        
-        # Unknown
-        # data = Node.void('data')
-        # data.add_child(Node.s32('type', 5))
-        # data.add_child(Node.s32('phase', 31))
-        # root.add_child(data)
         
         # Courses
         # 1 = 1-12, 2 = 13 and 14, 3 = 15, 4 = kami
@@ -120,24 +115,12 @@ class Beatstream2(EventLogHandler, BSTBase):
         data.add_child(Node.s32('phase', 10)) # Phase 1 - 9, plus unused 10th
         root.add_child(data)
         
-        # Unknown
-        # data = Node.void('data')
-        # data.add_child(Node.s32('type', 100))
-        # data.add_child(Node.s32('phase', 0))
-        # root.add_child(data)
-        
-        # Unknown, only shows up in the code as &phases->byte6C + 1
-        # data = Node.void('data')
-        # data.add_child(Node.s32('type', 200))
-        # data.add_child(Node.s32('phase', 0))
-        # root.add_child(data)
-
         # First play free
         data = Node.void('data')
         data.add_child(Node.s32('type', 1100))
         data.add_child(Node.s32('phase', 2))
         root.add_child(data)
-        
+
         return root
 
     def update_score(self, extid, songid, chartid, loc, points, gauge, 
@@ -263,7 +246,10 @@ class Beatstream2(EventLogHandler, BSTBase):
         pdata.add_child(survey)
         
         item = Node.void('item')
-        achievements = self.data.local.game.get_achievements(self.game, userid)
+        hacker = Node.void('hacker')
+        course = Node.void('course')
+
+        achievements = self.data.local.user.get_achievements(self.game, self.version, userid)
         for i in achievements:
             if i.type[:5] == "item_":
                 info = Node.void('info')
@@ -272,7 +258,40 @@ class Beatstream2(EventLogHandler, BSTBase):
                 info.add_child(Node.s32('param', i.data.get_int('param', 0)))
                 info.add_child(Node.s32('count', i.data.get_int('count', 0)))
                 item.add_child(info)
+
+            elif i.type == "hacker":
+                info = Node.void('info')
+                info.add_child(Node.s32('id', i.id))
+                info.add_child(Node.s8('state0', i.data.get_int("state0")))
+                info.add_child(Node.s8('state1', i.data.get_int("state1")))
+                info.add_child(Node.s8('state2', i.data.get_int("state2")))
+                info.add_child(Node.s8('state3', i.data.get_int("state3")))
+                info.add_child(Node.s8('state4', i.data.get_int("state4")))
+                info.add_child(Node.u64('update_time', Time.now() * 1000)) # update_time is required or the profile will fail
+                hacker.add_child(info) 
+
+            elif i.type == "course":
+                info = Node.void('record')
+                info.add_child(Node.s32('course_id', i.data.get_int("course_id")))
+                info.add_child(Node.s32('play', i.data.get_int("clear"))) # Play_id?
+                info.add_child(Node.bool('is_touch', i.data.get_bool("is_touch", False))) # ???
+                info.add_child(Node.s32('clear', i.data.get_int("clear"))) # Not sure what it wants here...
+                info.add_child(Node.s32('gauge', i.data.get_int("gauge")))
+                info.add_child(Node.s32('score', i.data.get_int("score")))
+                info.add_child(Node.s32('grade', i.data.get_int("grade")))
+                info.add_child(Node.s32('medal', i.data.get_int("medal")))
+                info.add_child(Node.s32('combo', i.data.get_int("combo")))
+                course.add_child(info)
+
+                rate = Node.void('rate')
+                rate.add_child(Node.s32('course_id', i.data.get_int("course_id")))
+                rate.add_child(Node.s32('play_count', i.data.get_int("play_count")))
+                rate.add_child(Node.s32('clear_count', i.data.get_int("clear_count")))
+                course.add_child(rate)
+
         pdata.add_child(item)
+        pdata.add_child(course)
+        pdata.add_child(hacker)
 
         customize = Node.void('customize')
         customize.add_child(Node.u16_array('custom', profile.get_int_array('custom', 16)))
@@ -280,19 +299,7 @@ class Beatstream2(EventLogHandler, BSTBase):
 
         tips = Node.void('tips')
         tips.add_child(Node.s32('last_tips', profile.get_int('last_tips')))
-        pdata.add_child(tips)
-
-        hacker = Node.void('hacker')
-        info = Node.void('info')
-        info.add_child(Node.s32('id', -2))
-        info.add_child(Node.s8('state0', 1))
-        info.add_child(Node.s8('state1', -1))
-        info.add_child(Node.s8('state2', 19))
-        info.add_child(Node.s8('state3', 0))
-        info.add_child(Node.s8('state4', 0))
-        info.add_child(Node.u64('update_time', Time.now() * 1000)) # update_time is required or the profile will fail
-        hacker.add_child(info) 
-        pdata.add_child(hacker)
+        pdata.add_child(tips)        
 
         play_log = Node.void('play_log')
         # Crysis and multiplay match data(?) go here
@@ -306,7 +313,7 @@ class Beatstream2(EventLogHandler, BSTBase):
         pdata.add_child(bisco)
 
         record = Node.void('record')
-        scores = self.data.local.music.get_scores(self.game, 2, userid)
+        scores = self.data.local.music.get_scores(self.game, self.version, userid)
         for i in scores:
             rec = Node.void('rec')
             rec.add_child(Node.s32('music_id', i.id))
@@ -319,48 +326,6 @@ class Beatstream2(EventLogHandler, BSTBase):
             rec.add_child(Node.s32('best_medal', i.data.get_int('medal')))
             record.add_child(rec)
         pdata.add_child(record)
-
-        course = Node.void('course')
-        for x in range (8, 16):
-            info = Node.void('record')
-            info.add_child(Node.s32('course_id', x))
-            info.add_child(Node.s32('play', 1)) # Play_id?
-            info.add_child(Node.bool('is_touch', True)) # ???
-            info.add_child(Node.s32('clear', 903)) # Not sure what it wants here...
-            info.add_child(Node.s32('gauge', 1000))
-            info.add_child(Node.s32('score', 44866928))
-            info.add_child(Node.s32('grade', 0))
-            info.add_child(Node.s32('medal', 3))
-            info.add_child(Node.s32('combo', 269))
-            course.add_child(info)
-
-            rate = Node.void('rate')
-            rate.add_child(Node.s32('course_id', x))
-            rate.add_child(Node.s32('play_count', 1))
-            rate.add_child(Node.s32('clear_count', 1))
-            course.add_child(rate)
-        # TODO: Save courses
-        for i in achievements:
-            if i.type == "course":
-                info = Node.void('record')
-                info.add_child(Node.s32('course_id', i.data.get_int("course_id")))
-                info.add_child(Node.s32('play', 0)) # Play_id?
-                info.add_child(Node.bool('is_touch', False)) # ???
-                info.add_child(Node.s32('clear', 1)) # Not sure what it wants here...
-                info.add_child(Node.s32('gauge', i.data.get_int("gauge")))
-                info.add_child(Node.s32('score', i.data.get_int("score")))
-                info.add_child(Node.s32('grade', i.data.get_int("grade")))
-                info.add_child(Node.s32('medal', i.data.get_int("medal")))
-                info.add_child(Node.s32('combo', i.data.get_int("combo")))
-                course.add_child(info)
-
-                rate = Node.void('rate')
-                rate.add_child(Node.s32('course_id', i.data.get_int("course_id")))
-                rate.add_child(Node.s32('play_count', 1))
-                rate.add_child(Node.s32('clear_count', 1))
-                course.add_child(rate)
-                
-        pdata.add_child(course)
 
         return root
 
@@ -402,7 +367,7 @@ class Beatstream2(EventLogHandler, BSTBase):
         items = profile.child('item')
         if items is not None:
             for i in items.children:
-                self.data.local.game.put_achievement(self.game, userid, i.child_value('id'), 
+                self.data.local.user.put_achievement(self.game, self.version, userid, i.child_value('id'), 
                 f"item_{i.child_value('type')}", {"param": i.child_value('param'), "count": i.child_value('count')})
 
         # Customize
@@ -431,13 +396,12 @@ class Beatstream2(EventLogHandler, BSTBase):
 
         # Beast hacker
         hacker = profile.child("hacker")
-        ackerhay = []
         for x in hacker.children:
-            ackerhay.append({"id": x.child_value("id"), "state0": x.child_value("state0"), 
-            "state1": x.child_value("state1"), "state2": x.child_value("state2"), "state3": x.child_value("state3"), 
-            "state4": x.child_value("state4"), "state5": x.child_value("state5")})
-        ret.replace_int_array
-
+            self.data.local.user.put_achievement(self.game, self.version, userid, x.child_value("id"), "hacker", {
+                "state0": x.child_value("state0"), 
+                "state1": x.child_value("state1"), "state2": x.child_value("state2"), "state3": x.child_value("state3"), 
+                "state4": x.child_value("state4"), "state5": x.child_value("state5")
+            })
         return ret
 
     # First call when somebody cards in, returns the status of a few crossover events
@@ -499,7 +463,7 @@ class Beatstream2(EventLogHandler, BSTBase):
         # If you played Museca 1+1/2 at launch you got rewards in BST and other games
         museca = Node.void('museca')
         player2.add_child(museca)
-        is_play_museca =  Node.bool('is_play_museca', 1)
+        is_play_museca =  Node.bool('is_play_museca', True)
         museca.add_child(is_play_museca)
 
         return player2
@@ -675,10 +639,43 @@ class Beatstream2(EventLogHandler, BSTBase):
         lobby2 =  Node.void('lobby2')
         lobby2.add_child(Node.s32('interval', 120))
         lobby2.add_child(Node.s32('interval_p', 120))
+        ver = request.child_value("uid")
+        mmode = request.child_value("mmode")
+        lobbies = self.data.local.lobby.get_all_lobbies(self.game, self.version)
+
+        if lobbies is not None:
+            for (user, lobby) in lobbies:
+                profile = self.get_profile(user)
+                info = self.data.local.lobby.get_play_session_info(self.game, self.version, user)
+                if profile is None or info is None:
+                    continue
+
+                e = Node.void('e')
+                lobby2.add_child(e)
+                e.add_child(Node.s32('eid', lobby.get_int('id')))
+                e.add_child(Node.u16('mid', lobby.get_int('mid')))
+                e.add_child(Node.u8('ng', lobby.get_int('ng')))
+                e.add_child(Node.s32('uid', profile.extid))
+                e.add_child(Node.s32('uattr', profile.get_int('uattr')))
+                e.add_child(Node.string('pn', profile.get_str('name')))
+                e.add_child(Node.s32('plyid', info.get_int('id')))
+                e.add_child(Node.s16('mg', profile.get_int('mg')))
+                e.add_child(Node.s32('mopt', lobby.get_int('mopt')))
+                e.add_child(Node.string('lid', lobby.get_str('lid')))
+                e.add_child(Node.string('sn', lobby.get_str('sn')))
+                e.add_child(Node.u8('pref', lobby.get_int('pref')))
+                e.add_child(Node.s8('stg', lobby.get_int('stg')))
+                e.add_child(Node.s8('pside', lobby.get_int('pside')))
+                e.add_child(Node.s16('eatime', lobby.get_int('eatime')))
+                e.add_child(Node.u8_array('ga', lobby.get_int_array('ga', 4)))
+                e.add_child(Node.u16('gp', lobby.get_int('gp')))
+                e.add_child(Node.u8_array('la', lobby.get_int_array('la', 4)))
+                e.add_child(Node.u8('ver', lobby.get_int('ver')))
 
         return lobby2
 
     def handle_lobby2_delete_lobby_request(self, request: Node) -> Node:
+        self.data.local.lobby.destroy_lobby(request.child_value("eid"))
         return Node.void('lobby2')
 
     # Called when matching starts
@@ -686,6 +683,62 @@ class Beatstream2(EventLogHandler, BSTBase):
         lobby2 = Node.void('lobby2')
         lobby2.add_child(Node.s32('interval', 120))
         lobby2.add_child(Node.s32('interval_p', 120))
+        userid = self.data.local.user.from_extid(self.game, self.version, request.child_value("e/uid"))
+
+        if userid is not None:
+            profile = self.get_profile(userid)
+            info = self.data.local.lobby.get_play_session_info(self.game, self.version, userid)
+            if profile is None or info is None:
+                print("Profile or info is none")
+                return lobby2
+
+            self.data.local.lobby.put_lobby(
+                self.game,
+                self.version,
+                userid,
+                {
+                    'mid': request.child_value('e/mid'),
+                    'ng': request.child_value('e/ng'),
+                    'mopt': request.child_value('e/mopt'),
+                    'lid': request.child_value('e/lid'),
+                    'sn': request.child_value('e/sn'),
+                    'pref': request.child_value('e/pref'),
+                    'stg': request.child_value('e/stg'),
+                    'pside': request.child_value('e/pside'),
+                    'eatime': request.child_value('e/eatime'),
+                    'ga': request.child_value('e/ga'),
+                    'gp': request.child_value('e/gp'),
+                    'la': request.child_value('e/la'),
+                    'ver': request.child_value('e/ver'),
+                }
+            )
+
+            lobby = self.data.local.lobby.get_lobby(self.game, self.version, userid)
+
+            lobby2.add_child(Node.s32('eid', lobby.get_int('id')))
+            e = Node.void('e')
+            lobby2.add_child(e)
+            e.add_child(Node.s32('eid', lobby.get_int('id')))
+            e.add_child(Node.u16('mid', lobby.get_int('mid')))
+            e.add_child(Node.u8('ng', lobby.get_int('ng')))
+            e.add_child(Node.s32('uid', profile.extid))
+            e.add_child(Node.s32('uattr', profile.get_int('uattr')))
+            e.add_child(Node.string('pn', profile.get_str('name')))
+            e.add_child(Node.s32('plyid', info.get_int('id')))
+            e.add_child(Node.s16('mg', profile.get_int('mg')))
+            e.add_child(Node.s32('mopt', lobby.get_int('mopt')))
+            e.add_child(Node.string('lid', lobby.get_str('lid')))
+            e.add_child(Node.string('sn', lobby.get_str('sn')))
+            e.add_child(Node.u8('pref', lobby.get_int('pref')))
+            e.add_child(Node.s8('stg', lobby.get_int('stg')))
+            e.add_child(Node.s8('pside', lobby.get_int('pside')))
+            e.add_child(Node.s16('eatime', lobby.get_int('eatime')))
+            e.add_child(Node.u8_array('ga', lobby.get_int_array('ga', 4)))
+            e.add_child(Node.u16('gp', lobby.get_int('gp')))
+            e.add_child(Node.u8_array('la', lobby.get_int_array('la', 4)))
+            e.add_child(Node.u8('ver', lobby.get_int('ver')))
+        else:
+            print("Userid is none")
         return lobby2
     
     # Called when a player tries to continue another credit 
@@ -693,10 +746,12 @@ class Beatstream2(EventLogHandler, BSTBase):
         return self.handle_player2_start_request(request) #It just wants the start request.
         # Hoping this won't cause issues
     
+    # Called when a user request an eamuse app screenshot
     def handle_info2_result_image_write_request(self, request: Node) -> Node:
         # TODO: Save image
         return Node.void("info2")
     
+    # Called when matching
     def handle_player2_matching_data_load_request(self, request: Node) -> Node:
         root = Node.void('player_matching')
         data = Node.void('data')
