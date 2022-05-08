@@ -57,6 +57,7 @@ from bemani.client.reflec import (
 )
 from bemani.client.bishi import TheStarBishiBashiClient
 from bemani.client.mga.mga import MetalGearArcadeClient
+from bemani.client.bst.beatstream2 import Beatstream2Client
 
 
 def get_client(proto: ClientProtocol, pcbid: str, game: str, config: Dict[str, Any]) -> BaseClient:
@@ -294,6 +295,12 @@ def get_client(proto: ClientProtocol, pcbid: str, game: str, config: Dict[str, A
             pcbid,
             config,
         )
+    if game == 'beatstream2':
+        return Beatstream2Client(
+            proto,
+            pcbid,
+            config
+        )
 
     raise Exception(f'Unknown game {game}')
 
@@ -502,6 +509,11 @@ def mainloop(address: str, port: int, configfile: str, action: str, game: str, c
             'model': "I36:J:A:A:2011092900",
             'avs': None,
         },
+        'beatstream2': {
+            'name': 'BeatStream 2',
+            'model': 'NBT:J:A:A:2016111400',
+            'avs': '2.16.7 r7487'
+        }
     }
     if action == 'list':
         for game in sorted([game for game in games]):
@@ -589,6 +601,7 @@ def main() -> None:
         'reflec-5': 'reflec-volzza',
         'reflec-6': 'reflec-volzza2',
         'mga': 'metal-gear-arcade',
+        'bst2': 'beatstream2',
     }.get(game, game)
 
     mainloop(args.address, args.port, args.config, action, game, args.cardid, args.verbose)

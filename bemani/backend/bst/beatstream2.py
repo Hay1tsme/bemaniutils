@@ -248,15 +248,16 @@ class Beatstream2(EventLogHandler, BSTBase):
         item = Node.void('item')
         hacker = Node.void('hacker')
         course = Node.void('course')
+        play_log = Node.void('play_log')        
 
         achievements = self.data.local.user.get_achievements(self.game, self.version, userid)
         for i in achievements:
-            if i.type[:5] == "item_":
+            if i.type[:4] == "item":
                 info = Node.void('info')
-                info.add_child(Node.s32('type', int(i.type[5:])))
                 info.add_child(Node.s32('id', i.id))
-                info.add_child(Node.s32('param', i.data.get_int('param', 0)))
-                info.add_child(Node.s32('count', i.data.get_int('count', 0)))
+                info.add_child(Node.s32('type', i.data.get_int('type')))
+                info.add_child(Node.s32('param', i.data.get_int('param')))
+                info.add_child(Node.s32('count', i.data.get_int('count')))
                 item.add_child(info)
 
             elif i.type == "hacker":
@@ -288,10 +289,19 @@ class Beatstream2(EventLogHandler, BSTBase):
                 rate.add_child(Node.s32('play_count', i.data.get_int("play_count")))
                 rate.add_child(Node.s32('clear_count', i.data.get_int("clear_count")))
                 course.add_child(rate)
+            
+            elif i.type == "crysis":
+                crysis = Node.void('crysis')
+                crysis.add_child(Node.s32('id', i.id))
+                crysis.add_child(Node.s8('step', i.data.get_int("step")))
+                crysis.add_child(Node.s32('r_gauge', i.data.get_int("r_gauge")))
+                crysis.add_child(Node.s8('r_state', i.data.get_int("r_state")))
+                play_log.add_child(crysis)
 
         pdata.add_child(item)
         pdata.add_child(course)
         pdata.add_child(hacker)
+        pdata.add_child(play_log)
 
         customize = Node.void('customize')
         customize.add_child(Node.u16_array('custom', profile.get_int_array('custom', 16)))
@@ -299,18 +309,7 @@ class Beatstream2(EventLogHandler, BSTBase):
 
         tips = Node.void('tips')
         tips.add_child(Node.s32('last_tips', profile.get_int('last_tips')))
-        pdata.add_child(tips)        
-
-        play_log = Node.void('play_log')
-        # Crysis and multiplay match data(?) go here
-        pdata.add_child(play_log)
-
-        bisco = Node.void('bisco')
-        pinfo = Node.void('pinfo')
-        pinfo.add_child(Node.s32('bnum', 0))
-        pinfo.add_child(Node.s32('jbox', 0))
-        bisco.add_child(pinfo)
-        pdata.add_child(bisco)
+        pdata.add_child(tips)
 
         record = Node.void('record')
         scores = self.data.local.music.get_scores(self.game, self.version, userid)
@@ -368,7 +367,8 @@ class Beatstream2(EventLogHandler, BSTBase):
         if items is not None:
             for i in items.children:
                 self.data.local.user.put_achievement(self.game, self.version, userid, i.child_value('id'), 
-                f"item_{i.child_value('type')}", {"param": i.child_value('param'), "count": i.child_value('count')})
+                f"item_{i.child_value('type')}", {"type": i.child_value('type'), "param": i.child_value('param'), 
+                "count": i.child_value('count')})
 
         # Customize
         custom = profile.child_value('customize/custom')
@@ -380,16 +380,16 @@ class Beatstream2(EventLogHandler, BSTBase):
         
         # Beast Crysis and multiplayer data
         play_log = profile.child('play_log')
-        play_log_crysis = play_log.child("crysis")
-        play_log_onmatch = play_log.child("onmatch")
 
-        if play_log_crysis is not None:
-            for x in play_log.child("crysis").children:
-                pass
-            
-        if play_log_onmatch is not None:
-            for x in play_log_onmatch.children:
-                pass
+        if play_log is not None:
+            for i in play_log.children:
+                if i.name == "crysis":
+                    self.data.local.user.put_achievement(self.game, self.version, userid, i.child_value('id'), 
+                    "crysis", {"step": i.child_value('step'), "r_gauge": i.child_value('r_gauge'), 
+                    "r_state": i.child_value('r_state')})
+
+                elif i.name == "onmatch":
+                    pass
 
         # Tips
         ret.replace_int('last_tips', profile.child_value('tips/last_tips'))
@@ -398,9 +398,8 @@ class Beatstream2(EventLogHandler, BSTBase):
         hacker = profile.child("hacker")
         for x in hacker.children:
             self.data.local.user.put_achievement(self.game, self.version, userid, x.child_value("id"), "hacker", {
-                "state0": x.child_value("state0"), 
-                "state1": x.child_value("state1"), "state2": x.child_value("state2"), "state3": x.child_value("state3"), 
-                "state4": x.child_value("state4"), "state5": x.child_value("state5")
+                "state0": x.child_value("state0"), "state1": x.child_value("state1"), "state2": x.child_value("state2"), 
+                "state3": x.child_value("state3"), "state4": x.child_value("state4")
             })
         return ret
 
@@ -499,9 +498,7 @@ class Beatstream2(EventLogHandler, BSTBase):
 
     # Called whenever some kind of error happens. 
     def handle_pcb2_error_request(self, request: Node) -> Node:
-        pcb2 = Node.void('pcb2')
-        pcb2.set_attribute('status', '0')
-        return pcb2
+        return Node.void('pcb2')
 
     # BST2 has to be special and have it's own boot method
     def handle_pcb2_boot_request(self, request: Node) -> Node:
@@ -586,6 +583,8 @@ class Beatstream2(EventLogHandler, BSTBase):
 
     # Called on card out
     def handle_player2_end_request(self, request: Node) -> Node:
+        self.data.local.lobby.destroy_play_session_info(self.game, self.version, 
+            self.data.local.user.from_refid(self.game, self.version, request.child_value("rid")))
         return Node.void('player2')
 
     # Called after finishing a song
@@ -648,7 +647,8 @@ class Beatstream2(EventLogHandler, BSTBase):
                 profile = self.get_profile(user)
                 info = self.data.local.lobby.get_play_session_info(self.game, self.version, user)
                 if profile is None or info is None:
-                    continue
+                    profile = Profile(self.game, self.version, "", 0)
+                    info = ValidatedDict()
 
                 e = Node.void('e')
                 lobby2.add_child(e)
@@ -674,7 +674,8 @@ class Beatstream2(EventLogHandler, BSTBase):
 
         return lobby2
 
-    def handle_lobby2_delete_lobby_request(self, request: Node) -> Node:
+    # Called to destroy a lobby after it's use
+    def handle_lobby2_delete_request(self, request: Node) -> Node:
         self.data.local.lobby.destroy_lobby(request.child_value("eid"))
         return Node.void('lobby2')
 
@@ -684,65 +685,67 @@ class Beatstream2(EventLogHandler, BSTBase):
         lobby2.add_child(Node.s32('interval', 120))
         lobby2.add_child(Node.s32('interval_p', 120))
         userid = self.data.local.user.from_extid(self.game, self.version, request.child_value("e/uid"))
+        if userid is None:
+            userid = 0
 
-        if userid is not None:
-            profile = self.get_profile(userid)
+        profile = self.get_profile(userid)
+        if profile is not None:
             info = self.data.local.lobby.get_play_session_info(self.game, self.version, userid)
-            if profile is None or info is None:
-                print("Profile or info is none")
-                return lobby2
-
-            self.data.local.lobby.put_lobby(
-                self.game,
-                self.version,
-                userid,
-                {
-                    'mid': request.child_value('e/mid'),
-                    'ng': request.child_value('e/ng'),
-                    'mopt': request.child_value('e/mopt'),
-                    'lid': request.child_value('e/lid'),
-                    'sn': request.child_value('e/sn'),
-                    'pref': request.child_value('e/pref'),
-                    'stg': request.child_value('e/stg'),
-                    'pside': request.child_value('e/pside'),
-                    'eatime': request.child_value('e/eatime'),
-                    'ga': request.child_value('e/ga'),
-                    'gp': request.child_value('e/gp'),
-                    'la': request.child_value('e/la'),
-                    'ver': request.child_value('e/ver'),
-                }
-            )
-
-            lobby = self.data.local.lobby.get_lobby(self.game, self.version, userid)
-
-            lobby2.add_child(Node.s32('eid', lobby.get_int('id')))
-            e = Node.void('e')
-            lobby2.add_child(e)
-            e.add_child(Node.s32('eid', lobby.get_int('id')))
-            e.add_child(Node.u16('mid', lobby.get_int('mid')))
-            e.add_child(Node.u8('ng', lobby.get_int('ng')))
-            e.add_child(Node.s32('uid', profile.extid))
-            e.add_child(Node.s32('uattr', profile.get_int('uattr')))
-            e.add_child(Node.string('pn', profile.get_str('name')))
-            e.add_child(Node.s32('plyid', info.get_int('id')))
-            e.add_child(Node.s16('mg', profile.get_int('mg')))
-            e.add_child(Node.s32('mopt', lobby.get_int('mopt')))
-            e.add_child(Node.string('lid', lobby.get_str('lid')))
-            e.add_child(Node.string('sn', lobby.get_str('sn')))
-            e.add_child(Node.u8('pref', lobby.get_int('pref')))
-            e.add_child(Node.s8('stg', lobby.get_int('stg')))
-            e.add_child(Node.s8('pside', lobby.get_int('pside')))
-            e.add_child(Node.s16('eatime', lobby.get_int('eatime')))
-            e.add_child(Node.u8_array('ga', lobby.get_int_array('ga', 4)))
-            e.add_child(Node.u16('gp', lobby.get_int('gp')))
-            e.add_child(Node.u8_array('la', lobby.get_int_array('la', 4)))
-            e.add_child(Node.u8('ver', lobby.get_int('ver')))
         else:
-            print("Userid is none")
+            profile = Profile(self.game, self.version, "", 0)
+            info = ValidatedDict()
+
+        self.data.local.lobby.put_lobby(
+            self.game,
+            self.version,
+            userid,
+            {
+                'mid': request.child_value('e/mid'),
+                'ng': request.child_value('e/ng'),
+                'mopt': request.child_value('e/mopt'),
+                'lid': request.child_value('e/lid'),
+                'sn': request.child_value('e/sn'),
+                'pref': request.child_value('e/pref'),
+                'stg': request.child_value('e/stg'),
+                'pside': request.child_value('e/pside'),
+                'eatime': request.child_value('e/eatime'),
+                'ga': request.child_value('e/ga'),
+                'gp': request.child_value('e/gp'),
+                'la': request.child_value('e/la'),
+                'ver': request.child_value('e/ver'),
+            }
+        )
+
+        lobby = self.data.local.lobby.get_lobby(self.game, self.version, userid)
+
+        lobby2.add_child(Node.s32('eid', lobby.get_int('id')))
+        e = Node.void('e')
+        lobby2.add_child(e)
+        e.add_child(Node.s32('eid', lobby.get_int('id')))
+        e.add_child(Node.u16('mid', lobby.get_int('mid')))
+        e.add_child(Node.u8('ng', lobby.get_int('ng')))
+        e.add_child(Node.s32('uid', profile.extid))
+        e.add_child(Node.s32('uattr', profile.get_int('uattr')))
+        e.add_child(Node.string('pn', profile.get_str('name')))
+        e.add_child(Node.s32('plyid', info.get_int('id')))
+        e.add_child(Node.s16('mg', profile.get_int('mg')))
+        e.add_child(Node.s32('mopt', lobby.get_int('mopt')))
+        e.add_child(Node.string('lid', lobby.get_str('lid')))
+        e.add_child(Node.string('sn', lobby.get_str('sn')))
+        e.add_child(Node.u8('pref', lobby.get_int('pref')))
+        e.add_child(Node.s8('stg', lobby.get_int('stg')))
+        e.add_child(Node.s8('pside', lobby.get_int('pside')))
+        e.add_child(Node.s16('eatime', lobby.get_int('eatime')))
+        e.add_child(Node.u8_array('ga', lobby.get_int_array('ga', 4)))
+        e.add_child(Node.u16('gp', lobby.get_int('gp')))
+        e.add_child(Node.u8_array('la', lobby.get_int_array('la', 4)))
+        e.add_child(Node.u8('ver', lobby.get_int('ver')))
         return lobby2
     
     # Called when a player tries to continue another credit 
     def handle_player2_continue_request(self, request: Node) -> Node:
+        self.data.local.lobby.destroy_play_session_info(self.game, self.version, 
+            self.data.local.user.from_refid(self.game, self.version, request.child_value("rid")))
         return self.handle_player2_start_request(request) #It just wants the start request.
         # Hoping this won't cause issues
     
