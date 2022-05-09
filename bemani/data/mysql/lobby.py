@@ -21,6 +21,9 @@ playsession = Table(
     Column('game', String(32), nullable=False),
     Column('version', Integer, nullable=False),
     Column('userid', BigInteger(unsigned=True), nullable=False),
+    Column('local_ip', String(45), nullable=False), # Support for IPv6 and  IPv4-mapped IPv6
+    Column('port', Integer, nullable=False),
+    Column('global_ip', String(45), nullable=False), # Not even sure if bemani games support those...
     Column('time', Integer, nullable=False, index=True),
     Column('data', JSON, nullable=False),
     UniqueConstraint('game', 'version', 'userid', name='game_version_userid'),
@@ -62,7 +65,7 @@ class LobbyData(BaseData):
             which represents the timestamp when the play session began.
         """
         sql = (
-            "SELECT id, time, data FROM playsession "
+            "SELECT id, time, local_ip, port, global_ip, data FROM playsession "
             "WHERE game = :game AND version = :version AND userid = :userid "
             "AND time > :time"
         )
@@ -72,6 +75,48 @@ class LobbyData(BaseData):
                 'game': game.value,
                 'version': version,
                 'userid': userid,
+                'time': Time.now() - Time.SECONDS_IN_HOUR,
+            },
+        )
+
+        if cursor.rowcount != 1:
+            # Settings doesn't exist
+            return None
+
+        result = cursor.fetchone()
+        data = ValidatedDict(self.deserialize(result['data']))
+        data['id'] = result['id']
+        data['time'] = result['time']
+        return data
+
+    def get_play_session_info_by_ip(self, game: GameConstants, version: int, local_ip: str, global_ip: str) -> Optional[ValidatedDict]:
+        """
+        Given a game, version, global and local ip, look up a play session's information.
+
+        Parameters:
+            game - Enum value identifying a game series.
+            version - Integer identifying the version of the game in the series.
+            local_ip - string representation of a local ip as sent by the game
+            global_ip - string representation of a global ip as sent by the game
+
+        Returns:
+            A dictionary representing play session info stored by a game class, or None
+            if there is no active session for this game/version/ip. The dictionary will
+            always contain an 'id' field which is the play session ID, and a 'time' field
+            which represents the timestamp when the play session began.
+        """
+        sql = (
+            "SELECT id, time, data, userid FROM playsession "
+            "WHERE game = :game AND version = :version AND local_ip = :local_ip AND global_ip = :global_ip "
+            "AND time > :time"
+        )
+        cursor = self.execute(
+            sql,
+            {
+                'game': game.value,
+                'version': version,
+                'local_ip': local_ip,
+                'global_ip': global_ip,
                 'time': Time.now() - Time.SECONDS_IN_HOUR,
             },
         )
@@ -120,7 +165,8 @@ class LobbyData(BaseData):
             ret.append((UserID(result['userid']), data))
         return ret
 
-    def put_play_session_info(self, game: GameConstants, version: int, userid: UserID, data: Dict[str, Any]) -> None:
+    def put_play_session_info(self, game: GameConstants, version: int, userid: UserID, data: Dict[str, Any], local_ip: str = "", 
+    port: int = "", global_ip: str = "",) -> None:
         """
         Given a game, version and a user ID, save play session information for that user.
 
@@ -138,8 +184,8 @@ class LobbyData(BaseData):
 
         # Add json to player session
         sql = (
-            "INSERT INTO playsession (game, version, userid, time, data) " +
-            "VALUES (:game, :version, :userid, :time, :data) " +
+            "INSERT INTO playsession (game, version, userid, local_ip, port, global_ip, time, data) " +
+            "VALUES (:game, :version, :userid, :local_ip, :port, :global_ip, :time, :data) " +
             "ON DUPLICATE KEY UPDATE time=VALUES(time), data=VALUES(data)"
         )
         self.execute(
@@ -148,6 +194,9 @@ class LobbyData(BaseData):
                 'game': game.value,
                 'version': version,
                 'userid': userid,
+                'local_ip': local_ip,
+                'port': port,
+                'global_ip': global_ip,
                 'time': Time.now(),
                 'data': self.serialize(data),
             },
@@ -204,6 +253,46 @@ class LobbyData(BaseData):
                 'game': game.value,
                 'version': version,
                 'userid': userid,
+                'time': Time.now() - Time.SECONDS_IN_HOUR,
+            },
+        )
+
+        if cursor.rowcount != 1:
+            # Settings doesn't exist
+            return None
+
+        result = cursor.fetchone()
+        data = ValidatedDict(self.deserialize(result['data']))
+        data['id'] = result['id']
+        data['time'] = result['time']
+        return data
+
+    def get_lobby_by_id(self, game: GameConstants, version: int, id: int) -> Optional[ValidatedDict]:
+        """
+        Given a game, version and a lobby ID, look up lobby information for that id.
+
+        Parameters:
+            game - Enum value identifying a game series.
+            version - Integer identifying the version of the game in the series.
+            id - Integer identifying a lobby, requested by the game
+
+        Returns:
+            A dictionary representing lobby info stored by a game class, or None
+            if there is no active session for this game/version/user. The dictionary will
+            always contain an 'id' field which is the lobby ID, and a 'time' field representing
+            the timestamp the lobby was created.
+        """
+        sql = (
+            "SELECT id, userid, time, data FROM lobby "
+            "WHERE game = :game AND version = :version AND id = :id "
+            "AND time > :time"
+        )
+        cursor = self.execute(
+            sql,
+            {
+                'game': game.value,
+                'version': version,
+                'id': id,
                 'time': Time.now() - Time.SECONDS_IN_HOUR,
             },
         )

@@ -2,8 +2,11 @@ from bemani.common import Profile, ValidatedDict, VersionConstants, ID, Time
 from bemani.backend.bst.base import BSTBase
 from bemani.common import VersionConstants, Time
 from bemani.backend.ess import EventLogHandler
+from bemani.common.constants import BroadcastConstants
 from bemani.common.validateddict import ValidatedDict
+from bemani.data.types import UserID
 from bemani.protocol import Node
+from bemani.data import Song
 
 class Beatstream2(EventLogHandler, BSTBase):
     name = "BeatStream アニムトライヴ"
@@ -404,33 +407,35 @@ class Beatstream2(EventLogHandler, BSTBase):
         return ret
 
     # First call when somebody cards in, returns the status of a few crossover events
-    def handle_player2_start_request(self, request: Node) -> Node:
+    def handle_player2_start_request(self, request: Node, is_continue: bool = False) -> Node:
         userid = self.data.local.user.from_refid(self.game, self.version, request.child_value('rid'))
         player2 = Node.void('player2')
+        play_id = 0
 
         if userid is not None:
-            self.data.local.lobby.put_play_session_info(
-                self.game,
-                self.version,
-                userid,
-                {
-                    'ga': request.child_value('ga'),
-                    'gp': request.child_value('gp'),
-                    'la': request.child_value('la'),
-                    'pnid': request.child_value('pnid'),
-                },
-            )
+            if not is_continue:
+                self.data.local.lobby.put_play_session_info(
+                    self.game,
+                    self.version,
+                    userid,
+                    {
+                        'ga': request.child_value('ga'),
+                        'gp': request.child_value('gp'),
+                        'la': request.child_value('la'),
+                    },                    
+                    "".join(str(e) + "." for e in request.child_value('ga'))[:-1],
+                    request.child_value('gp'),
+                    "".join(str(e) + "." for e in request.child_value('la'))[:-1],
+                )
+
             info = self.data.local.lobby.get_play_session_info(
                 self.game,
                 self.version,
                 userid,
             )
+            
             if info is not None:
                 play_id = info.get_int('id')
-            else:
-                play_id = 0
-        else:
-            play_id = 0
 
         # Session stuff, and resend global defaults
         player2.add_child(Node.s32('plyid', play_id))
@@ -636,41 +641,15 @@ class Beatstream2(EventLogHandler, BSTBase):
     # Called frequently to see who's playing
     def handle_lobby2_get_lobby_list_request(self, request: Node) -> Node:
         lobby2 =  Node.void('lobby2')
-        lobby2.add_child(Node.s32('interval', 120))
-        lobby2.add_child(Node.s32('interval_p', 120))
-        ver = request.child_value("uid")
-        mmode = request.child_value("mmode")
+        lobby2.add_child(Node.s32('interval_sec', 2))
         lobbies = self.data.local.lobby.get_all_lobbies(self.game, self.version)
 
         if lobbies is not None:
             for (user, lobby) in lobbies:
-                profile = self.get_profile(user)
-                info = self.data.local.lobby.get_play_session_info(self.game, self.version, user)
-                if profile is None or info is None:
-                    profile = Profile(self.game, self.version, "", 0)
-                    info = ValidatedDict()
-
                 e = Node.void('e')
                 lobby2.add_child(e)
-                e.add_child(Node.s32('eid', lobby.get_int('id')))
                 e.add_child(Node.u16('mid', lobby.get_int('mid')))
-                e.add_child(Node.u8('ng', lobby.get_int('ng')))
-                e.add_child(Node.s32('uid', profile.extid))
-                e.add_child(Node.s32('uattr', profile.get_int('uattr')))
-                e.add_child(Node.string('pn', profile.get_str('name')))
-                e.add_child(Node.s32('plyid', info.get_int('id')))
-                e.add_child(Node.s16('mg', profile.get_int('mg')))
-                e.add_child(Node.s32('mopt', lobby.get_int('mopt')))
-                e.add_child(Node.string('lid', lobby.get_str('lid')))
-                e.add_child(Node.string('sn', lobby.get_str('sn')))
-                e.add_child(Node.u8('pref', lobby.get_int('pref')))
-                e.add_child(Node.s8('stg', lobby.get_int('stg')))
-                e.add_child(Node.s8('pside', lobby.get_int('pside')))
-                e.add_child(Node.s16('eatime', lobby.get_int('eatime')))
-                e.add_child(Node.u8_array('ga', lobby.get_int_array('ga', 4)))
-                e.add_child(Node.u16('gp', lobby.get_int('gp')))
-                e.add_child(Node.u8_array('la', lobby.get_int_array('la', 4)))
-                e.add_child(Node.u8('ver', lobby.get_int('ver')))
+                e.add_child(Node.u64('eatime', lobby.get_int('eatime')))
 
         return lobby2
 
@@ -684,74 +663,106 @@ class Beatstream2(EventLogHandler, BSTBase):
         lobby2 = Node.void('lobby2')
         lobby2.add_child(Node.s32('interval', 120))
         lobby2.add_child(Node.s32('interval_p', 120))
-        userid = self.data.local.user.from_extid(self.game, self.version, request.child_value("e/uid"))
-        if userid is None:
-            userid = 0
 
-        profile = self.get_profile(userid)
-        if profile is not None:
-            info = self.data.local.lobby.get_play_session_info(self.game, self.version, userid)
-        else:
-            profile = Profile(self.game, self.version, "", 0)
-            info = ValidatedDict()
+        global_ip = "".join(str(e) + "." for e in request.child_value('e/ga'))[:-1],
+        local_ip = "".join(str(e) + "." for e in request.child_value('e/la'))[:-1],
+        session = self.data.local.lobby.get_play_session_info_by_ip(self.game, self.version, global_ip, local_ip)
+        userid = 0
+        requested_lobby_id = request.child_value('e/eid')
+        lobby = None
+        
+        if userid is not None:            
+            userid = session.get_int("userid")            
 
-        self.data.local.lobby.put_lobby(
-            self.game,
-            self.version,
-            userid,
-            {
-                'mid': request.child_value('e/mid'),
-                'ng': request.child_value('e/ng'),
-                'mopt': request.child_value('e/mopt'),
-                'lid': request.child_value('e/lid'),
-                'sn': request.child_value('e/sn'),
-                'pref': request.child_value('e/pref'),
-                'stg': request.child_value('e/stg'),
-                'pside': request.child_value('e/pside'),
-                'eatime': request.child_value('e/eatime'),
-                'ga': request.child_value('e/ga'),
-                'gp': request.child_value('e/gp'),
-                'la': request.child_value('e/la'),
-                'ver': request.child_value('e/ver'),
-            }
-        )
+        if requested_lobby_id > 0:
+            # Get the detales of the requested lobby
+            lobby = self.data.local.lobby.get_lobby_by_id(self.game, self.version, requested_lobby_id)
 
-        lobby = self.data.local.lobby.get_lobby(self.game, self.version, userid)
+        if lobby is None:
+            # Make a new lobby
+            self.data.local.lobby.put_lobby(
+                self.game,
+                self.version,
+                userid,
+                {
+                    'ver': request.child_value('e/ver'),
+                    'mid': request.child_value('e/mid'),
+                    'rest': request.child_value('e/rest'),
+                    'uid': request.child_value('e/uid'),
+                    'mmode': request.child_value('e/mmode'),
+                    'mg': request.child_value('e/mg'),
+                    'mopt': request.child_value('e/mopt'),
+                    'lid': request.child_value('e/lid'),
+                    'sn': request.child_value('e/sn'),
+                    'pref': request.child_value('e/pref'),
+                    'eatime': request.child_value('e/eatime'),
+                    'ga': request.child_value('e/ga'),
+                    'gp': request.child_value('e/gp'),
+                    'la': request.child_value('e/la'),
+                }
+            )
+
+            lobby = self.data.local.lobby.get_lobby(self.game, self.version, userid)
 
         lobby2.add_child(Node.s32('eid', lobby.get_int('id')))
         e = Node.void('e')
         lobby2.add_child(e)
         e.add_child(Node.s32('eid', lobby.get_int('id')))
+        e.add_child(Node.u8('ver', lobby.get_int('ver')))
         e.add_child(Node.u16('mid', lobby.get_int('mid')))
-        e.add_child(Node.u8('ng', lobby.get_int('ng')))
-        e.add_child(Node.s32('uid', profile.extid))
-        e.add_child(Node.s32('uattr', profile.get_int('uattr')))
-        e.add_child(Node.string('pn', profile.get_str('name')))
-        e.add_child(Node.s32('plyid', info.get_int('id')))
-        e.add_child(Node.s16('mg', profile.get_int('mg')))
-        e.add_child(Node.s32('mopt', lobby.get_int('mopt')))
+        e.add_child(Node.u8('rest', lobby.get_int('rest')))
+        e.add_child(Node.s32('uid', lobby.get_int('mmode')))
+        e.add_child(Node.s32('mmode', lobby.get_int('mmode')))
+        e.add_child(Node.s16('mg', lobby.get_int('mg')))
+        e.add_child(Node.s32('mopt', lobby.get_int('mopt')))        
         e.add_child(Node.string('lid', lobby.get_str('lid')))
         e.add_child(Node.string('sn', lobby.get_str('sn')))
         e.add_child(Node.u8('pref', lobby.get_int('pref')))
-        e.add_child(Node.s8('stg', lobby.get_int('stg')))
-        e.add_child(Node.s8('pside', lobby.get_int('pside')))
         e.add_child(Node.s16('eatime', lobby.get_int('eatime')))
         e.add_child(Node.u8_array('ga', lobby.get_int_array('ga', 4)))
         e.add_child(Node.u16('gp', lobby.get_int('gp')))
         e.add_child(Node.u8_array('la', lobby.get_int_array('la', 4)))
-        e.add_child(Node.u8('ver', lobby.get_int('ver')))
+        
         return lobby2
     
     # Called when a player tries to continue another credit 
     def handle_player2_continue_request(self, request: Node) -> Node:
-        self.data.local.lobby.destroy_play_session_info(self.game, self.version, 
-            self.data.local.user.from_refid(self.game, self.version, request.child_value("rid")))
-        return self.handle_player2_start_request(request) #It just wants the start request.
-        # Hoping this won't cause issues
+        return self.handle_player2_start_request(request, True)
     
     # Called when a user request an eamuse app screenshot
     def handle_info2_result_image_write_request(self, request: Node) -> Node:
-        # TODO: Save image
+        song: Song = self.data.local.music.get_song(self.game, self.version, request.child_value("music_id"),
+        request.child_value("music_level"))
+
+        diff_num = song.data.get_int("difficulty")
+        if diff_num is None:
+            diff_num = song.data.get_str("difficulty")
+        
+        grades = ["Red AAA", "AAA", "AA", "A", "B", "C", "D"]
+        medals = ["No Play", "Failed", "Saved", "Cleared", "Full Combo", "Perfect"]
+
+        card_data = {
+            BroadcastConstants.PLAYER_NAME: request.child_value("player_name"),
+            BroadcastConstants.SONG_NAME: request.child_value("music_title"),
+            BroadcastConstants.ARTIST_NAME: request.child_value("artist_name"),
+            BroadcastConstants.DIFFICULTY: request.child_value("music_level"),
+            BroadcastConstants.DIFFICULTY_LEVEL: diff_num,
+            BroadcastConstants.BEAST_RANK: request.child_value("beast_rank"),
+
+            BroadcastConstants.SCORE: request.child_value("score"),
+            BroadcastConstants.BEST_SCORE: request.child_value("best_score"),
+            BroadcastConstants.GAUGE: float(request.child_value("gauge") / 10),
+            BroadcastConstants.MEDAL: medals[request.child_value("medal")],
+            BroadcastConstants.GRADE: grades[request.child_value("grade")],
+
+            BroadcastConstants.MAX_COMBO: request.child_value("max_combo"),
+            BroadcastConstants.FANTASTIC: request.child_value("fanta"),
+            BroadcastConstants.GREAT: request.child_value("great"),
+            BroadcastConstants.FINE: request.child_value("fine"),
+            BroadcastConstants.MISS: request.child_value("miss"),            
+        }
+
+        # self.data.triggers.broadcast_score_discord(card_data, self.game, song)
         return Node.void("info2")
     
     # Called when matching
