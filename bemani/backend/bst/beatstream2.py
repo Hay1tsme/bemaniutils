@@ -1,3 +1,5 @@
+from typing import Dict, Any
+
 from bemani.common import Profile, ValidatedDict, VersionConstants, ID, Time
 from bemani.backend.bst.base import BSTBase
 from bemani.common import VersionConstants, Time
@@ -26,9 +28,32 @@ class Beatstream2(EventLogHandler, BSTBase):
     MEDAL_CLEAR = 3
     MEDAL_FC = 4
     MEDAL_PERFECT = 5
+
+    @classmethod
+    def get_settings(cls) -> Dict[str, Any]:
+        """
+        Return all of our front-end modifiably settings.
+        """
+        return {
+            'bools': [
+                {
+                    'name': 'Disable Local Matching',
+                    'tip': 'Disable local matching between games.',
+                    'category': 'game_config',
+                    'setting': 'disable_local_match',
+                },
+                {
+                    'name': 'Disable Global Matching',
+                    'tip': 'Disable global matching between games.',
+                    'category': 'game_config',
+                    'setting': 'disable_global_match',
+                },
+            ]
+        }
     
     def get_events(self) -> Node:
         root = super().get_events()
+        game_config = self.get_game_config()
         
         # Campaign
         data = Node.void('data')
@@ -70,7 +95,8 @@ class Beatstream2(EventLogHandler, BSTBase):
         data = Node.void('data')
         data.add_child(Node.s32('type', 3))
         data.add_child(Node.s32('phase', 7))
-        root.add_child(data)
+        if not game_config.get_bool('enable_local_match'):
+            root.add_child(data)
         
         # Controlls floor infection on attract screen ONLY
         data = Node.void('data')
@@ -82,7 +108,8 @@ class Beatstream2(EventLogHandler, BSTBase):
         data = Node.void('data')
         data.add_child(Node.s32('type', 3))
         data.add_child(Node.s32('phase', 12))
-        root.add_child(data)
+        if not game_config.get_bool('enable_global_match'):
+            root.add_child(data)
 
         # Unlocks the bemani rockin fes songs
         data = Node.void('data')
@@ -567,7 +594,7 @@ class Beatstream2(EventLogHandler, BSTBase):
     def handle_shop2_setting_write_request(self, request: Node) -> Node:
         shop2 = Node.void('shop2')
         #TODO: shop settings saving
-        return shop2    
+        return shop2
 
     # Called after settings_write, not sure what it does
     def handle_info2_music_count_read_request(self, request: Node) -> Node:
