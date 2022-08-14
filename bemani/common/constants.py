@@ -328,6 +328,17 @@ class BroadcastConstants(Enum):
     COMBO: Final[str] = 'Combo'
     MEDAL: Final[str] = 'Medal'
 
+    # Added for BST
+    DIFFICULTY_LEVEL: Final[str] = "Difficulty"
+    BEAST_RANK: Final[str] = "Beast Rank"
+    BEST_SCORE: Final[str] = "Best Score"
+    GAUGE: Final[str] = "Gauge"
+    MAX_COMBO: Final[str] = "Max Combo"
+    FANTASTIC: Final[str] = "Fantastic"
+    GREAT: Final[str] = "Great"
+    FINE: Final[str] = "Fine"
+    MISS: Final[str] = "Miss"
+
 
 class _RegionConstants:
     """

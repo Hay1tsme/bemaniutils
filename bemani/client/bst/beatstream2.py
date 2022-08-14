@@ -1,8 +1,10 @@
 from typing import Optional
 
 from bemani.client.base import BaseClient
+from bemani.common.constants import GameConstants, VersionConstants
 from bemani.common.time import Time
 from bemani.common.validateddict import Profile
+from bemani.data import Song
 from bemani.protocol import Node
 
 class Beatstream2Client(BaseClient):
@@ -85,6 +87,32 @@ class Beatstream2Client(BaseClient):
 
         return ret
     
+    def verify_player2_stagedata_write(self,  profile: Profile, song: Song, sid: int) -> None:
+        call = self.call_node()
+        player2 = Node.void("player2")
+        player2.set_attribute('method', 'stagedata_write')
+
+        player2.add_child(Node.s32('play_id'), sid)
+        player2.add_child(Node.s32('continue_count'), 0)
+        player2.add_child(Node.s32('stage_no'), 0)
+        player2.add_child(Node.s32('user_id'), profile.get_int('usrid'))
+        player2.add_child(Node.string('location_id'), "JP-1")
+        player2.add_child(Node.s32('select_music_id'), song.id)
+        player2.add_child(Node.s32('select_grade'), song.chart)
+        player2.add_child(Node.s32('result_clear_gauge'), 1000)
+        player2.add_child(Node.s32('result_score'), 888392)
+        player2.add_child(Node.s32('result_max_combo'), 114)
+        player2.add_child(Node.s32('result_grade'), 0)
+        player2.add_child(Node.s32('result_medal'), 3)
+        player2.add_child(Node.s32('result_fanta'), 68)
+        player2.add_child(Node.s32('result_great'), 35)
+        player2.add_child(Node.s32('result_fine'), 7)
+        player2.add_child(Node.s32('result_miss'), 2)
+
+        call.add_child(player2)
+        resp = self.exchange('', call)
+        self.assert_path(resp, "response/player2/@status")
+
     def verify_player2_write(self, profile: Profile, sid: int) -> None:
         call = self.call_node()
 
@@ -175,20 +203,59 @@ class Beatstream2Client(BaseClient):
         resp = self.exchange('', call)
         self.assert_path(resp, "response/player2/uid")
 
+    def verify_info2_result_image_write(self, profile: Profile, song: Song, sid: int) -> None:
+        call = self.call_node()
+        info2 = Node.void("info2")
+        info2.set_attribute('method', 'result_image_write')
+
+        info2.add_child(Node.s32("play_id", sid))
+        info2.add_child(Node.s32("continue_no", 0))
+        info2.add_child(Node.s32("stage_no", 0))
+        info2.add_child(Node.string("ref_id", profile.refid))
+        info2.add_child(Node.s32("beast_rank", 0))
+        info2.add_child(Node.string("player_name", profile.get_str("name")))
+        info2.add_child(Node.s32("music_id", song.id))
+        info2.add_child(Node.s32("music_grade", 0))
+        info2.add_child(Node.s32("music_level", song.chart))
+        info2.add_child(Node.string("music_title", song.name))
+        info2.add_child(Node.string("artist_name", song.artist))
+        info2.add_child(Node.s32("gauge", 995))
+        info2.add_child(Node.s32("grade", 0))
+        info2.add_child(Node.s32("score", 820567))
+        info2.add_child(Node.s32("best_score", 0))
+        info2.add_child(Node.s32("medal", 3))
+        info2.add_child(Node.bool("is_new_record", False))
+        info2.add_child(Node.s32("fanta", 81))
+        info2.add_child(Node.s32("great", 29))
+        info2.add_child(Node.s32("fine", 23))
+        info2.add_child(Node.s32("miss", 8))
+
+        call.add_child(info2)
+        resp = self.exchange('', call)
+        self.assert_path(resp, "response/info2/@status")
+        
     def verify_player2_end(self, refid: str) -> None:
         call = self.call_node()
         player2 = Node.void("player2")
-        player2.set_attribute('method', 'end')
+        player2.set_attribute('method', 'continue')
         player2.add_child(Node.string("rid", refid))
         call.add_child(player2)
         resp = self.exchange('', call)
         self.assert_path(resp, "response/player2/@status")
 
-
     def verify(self, cardid: Optional[str]) -> None:
+        # Make sure we can card in properly
         refid = self.verify_cardmng_inquire(cardid, "query", True)
         sid = self.verify_player2_start(refid)
         profile = self.verify_player2_read(refid)
-        # TODO: Scores
+
+        # Make sure courses, songs, and scorecards save properly
+        test_song = Song(GameConstants.BST, VersionConstants.BEATSTREAM_2,
+        129, 0, "チョコレートスマイル", "ちよこれえとすまいる", "", {})
+        
+        self.verify_info2_result_image_write(profile, test_song, sid)
+        self.verify_player2_stagedata_write(profile, test_song, sid)
+
+        # Make sure profile saves properly, and game ends gracefully
         self.verify_player2_write(profile, sid)
         self.verify_player2_end(refid)

@@ -641,7 +641,7 @@ class Beatstream2(EventLogHandler, BSTBase):
     # Called frequently to see who's playing
     def handle_lobby2_get_lobby_list_request(self, request: Node) -> Node:
         lobby2 =  Node.void('lobby2')
-        lobby2.add_child(Node.s32('interval_sec', 2))
+        lobby2.add_child(Node.s32('interval_sec', 10))
         lobbies = self.data.local.lobby.get_all_lobbies(self.game, self.version)
 
         if lobbies is not None:
@@ -735,8 +735,6 @@ class Beatstream2(EventLogHandler, BSTBase):
         request.child_value("music_level"))
 
         diff_num = song.data.get_int("difficulty")
-        if diff_num is None:
-            diff_num = song.data.get_str("difficulty")
         
         grades = ["Red AAA", "AAA", "AA", "A", "B", "C", "D"]
         medals = ["No Play", "Failed", "Saved", "Cleared", "Full Combo", "Perfect"]
@@ -762,7 +760,7 @@ class Beatstream2(EventLogHandler, BSTBase):
             BroadcastConstants.MISS: request.child_value("miss"),            
         }
 
-        # self.data.triggers.broadcast_score_discord(card_data, self.game, song)
+        self.data.triggers.broadcast_score(card_data, self.game, song)
         return Node.void("info2")
     
     # Called when matching
